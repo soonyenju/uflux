@@ -1,4 +1,4 @@
-# Unified FLUXes (UFLUX)
+# [Unified FLUXes (UFLUX)](https://sites.google.com/view/uflux)
 
 
 The UFLUX framework integrates machine learning techniques, primarily XGBoost, but also supports Random Forest and Neural Networks, alongside Earth observations and process-based baseline models, to estimate terrestrial ecosystem carbon (CO2 + CH4) and water fluxes. \

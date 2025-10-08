@@ -1,6 +1,6 @@
 # [Unified FLUXes (UFLUX)](https://sites.google.com/view/uflux)
 
-[Declaration: this repo is still under major dev]
+*Declaration: this repo is still under major dev*
 
 The UFLUX framework integrates machine learning techniques, primarily XGBoost, but also supports Random Forest and Neural Networks, alongside Earth observations and process-based baseline models, to estimate terrestrial ecosystem carbon (CO2 + CH4) and water fluxes. \
 It employs AI and Earth observation data to refine baseline model predictions by comparing them to eddy covariance measurements, ensuring more accurate and consistent flux estimates. \

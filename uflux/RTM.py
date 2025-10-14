@@ -874,3 +874,20 @@ class SAILH:
 # )
 # canopy_model.canopopt['rad'].loc[soil_model.soilopt['refl'].index, 'rso'].plot()
 # # canopy_model.canopopt['ext']['k_ext_sun']
+
+
+# ========================================================================================================================
+# Helpers: Load model parameters
+# ========================================================================================================================
+
+import importlib.resources as resources
+
+def load_optical_params():
+    with resources.files("mymodule.model_parameters").joinpath("optical_params.csv").open("r") as f:
+        optical_params = pd.read_csv(f, index_col = 0)
+        optical_params = {
+            k: optical_params[[k]].values for k in optical_params.columns if not k in ['GSV_dim0', 'GSV_dim1', 'GSV_dim2']
+        } | {
+            'GSV': optical_params[['GSV_dim0', 'GSV_dim1', 'GSV_dim2']].values
+        }
+    return optical_params

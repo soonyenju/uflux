@@ -880,14 +880,12 @@ class SAILH:
 # Helpers: Load model parameters
 # ========================================================================================================================
 
-import importlib.resources as resources
-
 def load_optical_params():
-    with resources.files("uflux.model_parameters").joinpath("optical_params.csv").open("r") as f:
-        optical_params = pd.read_csv(f, index_col = 0)
-        optical_params = {
-            k: optical_params[[k]].values for k in optical_params.columns if not k in ['GSV_dim0', 'GSV_dim1', 'GSV_dim2']
-        } | {
-            'GSV': optical_params[['GSV_dim0', 'GSV_dim1', 'GSV_dim2']].values
-        }
+    params_file = Path(__file__).parent / "model_parameters/optical_params.csv"
+    optical_params = pd.read_csv(f, index_col = 0)
+    optical_params = {
+        k: optical_params[[k]].values for k in optical_params.columns if not k in ['GSV_dim0', 'GSV_dim1', 'GSV_dim2']
+    } | {
+        'GSV': optical_params[['GSV_dim0', 'GSV_dim1', 'GSV_dim2']].values
+    }
     return optical_params

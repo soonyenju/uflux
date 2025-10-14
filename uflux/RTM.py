@@ -880,6 +880,8 @@ class SAILH:
 # Helpers: Load model parameters
 # ========================================================================================================================
 
+from pathlib import Path
+
 def load_optical_params():
     params_file = Path(__file__).parent / "model_parameters/optical_params.csv"
     optical_params = pd.read_csv(f, index_col = 0)

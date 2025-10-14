@@ -884,7 +884,7 @@ from pathlib import Path
 
 def load_optical_params():
     params_file = Path(__file__).parent / "model_parameters/optical_params.csv"
-    optical_params = pd.read_csv(f, index_col = 0)
+    optical_params = pd.read_csv(params_file, index_col = 0)
     optical_params = {
         k: optical_params[[k]].values for k in optical_params.columns if not k in ['GSV_dim0', 'GSV_dim1', 'GSV_dim2']
     } | {

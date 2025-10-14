@@ -3,6 +3,7 @@ import numpy as np
 import pandas as pd
 import scipy.integrate as integrate
 from scipy.stats import poisson
+from copy import deepcopy
 
 # ========================================================================================================================
 # Module A: PROSPECT-5D (Leaf Optics Module)

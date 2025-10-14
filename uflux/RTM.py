@@ -883,7 +883,7 @@ class SAILH:
 import importlib.resources as resources
 
 def load_optical_params():
-    with resources.files("mymodule.model_parameters").joinpath("optical_params.csv").open("r") as f:
+    with resources.files("uflux.model_parameters").joinpath("optical_params.csv").open("r") as f:
         optical_params = pd.read_csv(f, index_col = 0)
         optical_params = {
             k: optical_params[[k]].values for k in optical_params.columns if not k in ['GSV_dim0', 'GSV_dim1', 'GSV_dim2']

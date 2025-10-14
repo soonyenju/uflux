@@ -94,7 +94,7 @@ class PROSPECT_5D:
         tau = np.ones((len(t1), 1))
         tau[j] = t1[j] + t2[j]
         kChlrel = np.zeros((len(t1), 1))
-        kChlrel[j] = self.leafbio['Cab'] * optical_params['Kab'][j] / (Kall[j] * self.leafbio['N'])
+        kChlrel[j] = self.leafbio['Cab'] * self.optical_params['Kab'][j] / (Kall[j] * self.leafbio['N'])
 
         t_alph = self._calculate_tav(40, self.optical_params["nr"])
         r_alph = 1 - t_alph

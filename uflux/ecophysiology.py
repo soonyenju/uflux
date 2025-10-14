@@ -362,8 +362,12 @@ class Optimality:
         - 'gammastar' : float — Photorespiratory compensation point (Pa)
         - 'ns_star' : float — Relative water viscosity (-)
         - 'kmm' : float — Michaelis–Menten constant (Pa) for Rubisco-limited assimilation
+        - 'xi' : float — Sensitivity of χ to vapour pressure deficit, reflecting the carbon cost of water use 
+          (Medlyn et al., 2011; Prentice et al., 2014)
+        - 'chi' : float — Optimal ratio of internal (Ci) to ambient (Ca) CO₂ partial pressures (χ)
+        - 'Ci' : float — Intercellular CO₂ partial pressure (Pa)
     """
-    def __init__(self, env_params: dict, T_ref = 25.) -> None:
+    def __init__(self, env_params: dict, T_ref = 25., photosynthetic_pathway = 'C3') -> None:
         self.env_params = env_params
         # Ta, Patm, VPD, CO2
         self.env_params['VPD'] *= 100 # hPa -> Pa
@@ -372,6 +376,25 @@ class Optimality:
         self.env_params['gammastar'] = self._calc_gammastar(self.env_params['Ta'], self.env_params['Patm'], T_ref = T_ref)
         self.env_params['ns_star'] = self._calc_ns_star(self.env_params['Ta'], self.env_params['Patm'], T_ref = T_ref)
         self.env_params['kmm'] = self._calc_kmm(self.env_params['Ta'], self.env_params['Patm'], T_ref = T_ref)
+
+        # Unit cost ratio for C4 plants (16.222).
+        if photosynthetic_pathway == 'C3':
+            self.env_params['beta'] = 146.0
+        elif photosynthetic_pathway == 'C4':
+            self.env_params['beta'] = 16.22 # 146.0 / 9
+
+        self.env_params['xi'] = np.sqrt(
+            (self.env_params['beta'] * (self.env_params['kmm'] + self.env_params['gammastar'])) / 
+            (1.6 * self.env_params['ns_star'])
+        )
+
+        self.env_params['chi'] = (
+            self.env_params['gammastar'] / self.env_params['Ca'] + 
+             (1.0 - self.env_params['gammastar'] / self.env_params['Ca']) * self.env_params['xi'] / 
+              (self.env_params['xi'] + np.sqrt(self.env_params['VPD']))
+        )
+        
+        self.env_params['Ci'] = self.env_params['chi'] * self.env_params['Ca']
 
     @staticmethod
     def _calc_CO2_to_Ca(CO2, Patm):
@@ -523,7 +546,7 @@ class Optimality:
         return kc * (1.0 + po / ko)
 
 
-# ------------------------------------------------------------------------------------------------------------------------
+# # ------------------------------------------------------------------------------------------------------------------------
 # # Example
 
 # opt_model = Optimality({
@@ -534,10 +557,16 @@ class Optimality:
 # })
 
 # print(
-#     'Photorespiratory CO2 compensation point (gammastar, Pa): ',
+#     'Photorespiratory CO2 compensation point (gammastar, Pa):',
 #     opt_model.env_params['gammastar'],
 #     '\nRelative viscosity of water (ns_star, -): ',
 #     opt_model.env_params['ns_star'],
-#     '\nMichaelis Menten coefficient of Rubisco-limited assimilation (kmm, Pa): ',
+#     '\nMichaelis Menten coefficient of Rubisco-limited assimilation (kmm, Pa):',
 #     opt_model.env_params['kmm'],
+#     "\nSensitivity of χ to VPD (xi, -):",
+#     opt_model.env_params['xi'],
+#     "\nOptimal Ci/Ca ratio (chi, -):",
+#     opt_model.env_params['chi'],
+#     "\nIntercellular CO₂ partial pressure (Ci, Pa):",
+#     opt_model.env_params['Ci'],
 # )

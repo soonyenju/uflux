@@ -897,4 +897,8 @@ def load_optical_params():
     } | {
         'GSV': optical_params[['GSV_dim0', 'GSV_dim1', 'GSV_dim2']].values
     }
+    # # Option 2: load optical_params from pickle
+    # params_file = Path(__file__).parent / "model_parameters/optical_params.pkl"
+    # with open(params_file, "rb") as f:
+    #     optical_params = pickle.load(f)
     return optical_params

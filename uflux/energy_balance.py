@@ -1,3 +1,5 @@
+import numpy as np
+
 class EnergyBalance:
     """
     A class to compute canopy or leaf-level energy fluxes and solve for

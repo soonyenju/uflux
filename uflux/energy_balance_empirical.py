@@ -1,3 +1,6 @@
+import numpy as np
+from scipy.optimize import fsolve
+
 def calc_latent_energy_flux(gs):
     """
     Calculating latent heat fluxes.

@@ -46,6 +46,10 @@ def calc_aerodynamic_resistance(u, z=2.0, method='log', hc=None, z0m=None, z0h=N
     ra3 = calc_aerodynamic_resistance(u=np.array([0.5, 1.0, 2.0, 5.0]), method='empirical')
     print("ra (empirical 208/u):", ra3)
 
+    # Example 4: custom
+    # ra = calc_aerodynamic_resistance(u=1, z=2.0, method='log')
+    # print(ra)
+
     Notes
     -----
     - 'log' method assumes neutral stratification (Monin-Obukhov length large).
@@ -96,7 +100,120 @@ def calc_aerodynamic_resistance(u, z=2.0, method='log', hc=None, z0m=None, z0h=N
     else:
         raise ValueError("method must be 'log' or 'empirical'.")
 
-# Example
-# -------
-# ra = calc_aerodynamic_resistance(u=1, z=2.0, method='log')
-# print(ra)
+
+def calc_sensible_heat_flux_air(Ta, u, Rn=None, G=0.1, beta=None, P=101325):
+    """
+    Estimate sensible heat flux (W/m²) using simple bulk or energy balance method.
+
+    Parameters
+    ----------
+    Ta : float
+        Air temperature (°C)
+    u : float
+        Wind speed (m/s)
+    Rn : float, optional
+        Net radiation (W/m²). Required if using Bowen ratio method.
+    G : float, optional
+        Fraction of Rn going into soil heat (default 0.1)
+    beta : float, optional
+        Bowen ratio (H/LE). If None, uses bulk transfer approximation.
+    P : float, optional
+        Air pressure (Pa). Default = 101325 Pa.
+
+    Returns
+    -------
+    H : float
+        Sensible heat flux (W/m²)
+
+    Examples
+    --------
+    # Example 1: Using bulk transfer
+    Ta = 11     # °C
+    u = 0.73       # m/s
+    H_bulk = calc_sensible_heat_flux_air(Ta, u)
+    print(f"Sensible heat flux (bulk): {H_bulk:.1f} W/m²")
+
+    # Example 2: Using Bowen ratio + net radiation
+    Rn = 1000    # W/m²
+    beta = 0.1  # typical for vegetated surfaces
+    H_bowen = calc_sensible_heat_flux_air(Ta, u, Rn=Rn, beta=beta)
+    print(f"Sensible heat flux (Bowen): {H_bowen:.1f} W/m²")
+    """
+    # Constants
+    cp = 1005.0  # specific heat of air (J/kg/K)
+    R = 287.05   # gas constant for dry air (J/kg/K)
+    Tk = Ta + 273.15
+
+    # Air density (kg/m³)
+    rho = P / (R * Tk)
+
+    if beta is not None and Rn is not None:
+        # Energy balance approach: H = beta / (1 + beta) * (Rn - G*Rn)
+        H = (beta / (1 + beta)) * (Rn * (1 - G))
+    else:
+        # Bulk transfer method: approximate (Ts - Ta) from empirical 1–3°C
+        delta_T = 2.0  # assumed temperature difference in K
+        gh = 0.0025 * u  # conductance for heat (m/s)
+        H = rho * cp * gh * delta_T
+
+    return H
+
+
+def calc_latent_heat_flux_air(Ta, VPD_hPa, u, P=101325):
+    """
+    Calculate latent heat flux (W/m²) using simplified bulk transfer,
+    using vapor pressure deficit (VPD) instead of RH.
+
+    Parameters
+    ----------
+    Ta : float
+        Air temperature in °C
+    VPD_hPa : float
+        Vapor pressure deficit in hPa
+    u : float
+        Wind speed at reference height (m/s)
+    P : float
+        Air pressure in Pa (default 101325 Pa)
+
+    Returns
+    -------
+    LE : float
+        Latent heat flux in W/m²
+    
+    Example
+    -------
+    Ta = 11          # °C
+    VPD = 3.53   # hPa
+    ws = 0.73          # m/s
+    LE = calc_latent_heat_flux_air(Ta, VPD, ws)
+    print(f"Latent heat flux: {LE:.1f} W/m²")
+    """
+    # Constants
+    Lv = 2.45e6  # Latent heat of vaporization (J/kg)
+    
+    # Convert temperature to Kelvin
+    Tk = Ta + 273.15
+
+    # Saturation vapor pressure (Pa) over water
+    es = 610.78 * np.exp(Ta * 17.27 / (Ta + 237.3))  # Pa
+
+    # Convert VPD from hPa to Pa
+    VPD_Pa = VPD_hPa * 100.0  # Pa
+
+    # Actual vapor pressure (Pa)
+    ea = es - VPD_Pa  # ea = es - VPD
+
+    # Saturation specific humidity (kg/kg)
+    qs = 0.622 * es / (P - 0.378 * es)
+
+    # Actual specific humidity (kg/kg)
+    qa = 0.622 * ea / (P - 0.378 * ea)
+
+    # Bulk transfer coefficient for water vapor (simplified)
+    g_v = 0.0025 * u  # m/s
+
+    # Latent heat flux (W/m²)
+    LE = Lv * g_v * (qs - qa)
+
+    return LE
+    

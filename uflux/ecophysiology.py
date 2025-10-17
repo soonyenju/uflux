@@ -796,8 +796,10 @@ class Optimality:
 
 class PhotosynthesisKinetics:
     """
-    A class for calculating temperature-dependent photosynthetic parameters
-    such as Vcmax (maximum carboxylation rate), Jmax (maximum electron transport rate),
+    A class for calculating temperature-dependent photosynthetic parameters for both C3 and C4 pathways
+    such as Vcmax (maximum carboxylation rate, C3), Jmax (maximum electron transport rate, C3),
+    Maximum rate of phosphoenolpyruvate (PEP) carboxylase activity (Vpmax, C4), 
+    Michaelis–Menten constant for CO₂ for PEP carboxylase (Kp, C4), Bundle sheath conductance to CO₂ diffusion (gbs, C4), 
     and actual electron transport rate (J) using Arrhenius and peaked Arrhenius functions.
 
     References
@@ -826,6 +828,13 @@ class PhotosynthesisKinetics:
     print(f"Vcmax = {Vcmax:.2f} µmol m⁻² s⁻¹")
     print(f"Jmax  = {Jmax:.2f} µmol m⁻² s⁻¹")
     print(f"J     = {J:.2f} µmol m⁻² s⁻¹")
+
+    Vpmax, Kp, gbs = PhotosynthesisKinetics.calc_C4_kinetics(Ta_C)
+
+    print(f"Vpmax = {Vpmax:.2f} µmol m⁻² s⁻¹")
+    print(f"Kp    = {Kp:.2f} µmol mol⁻¹")
+    print(f"gbs   = {gbs:.2f} mol m⁻² s⁻¹")
+
     """
 
     R = 8.3145  # J mol⁻¹ K⁻¹
@@ -945,3 +954,52 @@ class PhotosynthesisKinetics:
         term = (alpha * I + Jmax)
         return (term - np.sqrt(term**2 - 4 * theta * alpha * I * Jmax)) / (2 * theta)
 
+    @classmethod
+    def calc_C4_kinetics(
+        cls,
+        Ta_C: float,
+        Vpmax25: float = 100.0,
+        Kp25: float = 80.0,
+        gbs25: float = 0.004,
+        Ea_Vpmax: float = 70000.0,
+        Ea_Kp: float = 36000.0,
+        Ea_gbs: float = 30000.0,
+        Tref: float = 298.15
+    ) -> dict:
+        """
+        Calculate temperature-dependent C4 photosynthetic biochemical parameters.
+
+        Parameters
+        ----------
+        Ta_C : float
+            Air temperature (°C).
+        Vpmax25 : float, optional
+            Reference PEP carboxylase activity at 25°C (µmol m⁻² s⁻¹). Default = 100.
+        Kp25 : float, optional
+            Michaelis–Menten constant for CO₂ at 25°C (µmol mol⁻¹). Default = 80.
+        gbs25 : float, optional
+            Bundle sheath conductance to CO₂ at 25°C (mol m⁻² s⁻¹). Default = 0.004.
+        Ea_Vpmax : float, optional
+            Activation energy for Vpmax (J mol⁻¹). Default = 70,000.
+        Ea_Kp : float, optional
+            Activation energy for Kp (J mol⁻¹). Default = 36,000.
+        Ea_gbs : float, optional
+            Activation energy for gbs (J mol⁻¹). Default = 30,000.
+        Tref : float, optional
+            Reference temperature (Kelvin). Default = 298.15 K (25°C).
+
+        Returns
+        -------
+        dict
+            Dictionary with:
+                'Vpmax' : temperature-corrected Vpmax (µmol m⁻² s⁻¹)
+                'Kp'    : temperature-corrected Kp (µmol mol⁻¹)
+                'gbs'   : temperature-corrected gbs (mol m⁻² s⁻¹)
+        """
+        T = Ta_C + 273.15
+
+        Vpmax = Vpmax25 * cls.arrhenius(T, Ea_Vpmax, Tref)
+        Kp = Kp25 * cls.arrhenius(T, Ea_Kp, Tref)
+        gbs = gbs25 * cls.arrhenius(T, Ea_gbs, Tref)
+
+        return Vpmax, Kp, gbs

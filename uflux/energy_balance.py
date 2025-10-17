@@ -100,7 +100,7 @@ class EnergyBalance:
         self.ra = ra
         self.gs = gs
 
-        self.rs = self.stomatal_conductance_to_resistance(gs)
+        self.rs = self.stomatal_conductance_to_resistance(self.gs, self.Ta)
 
     def sensible_heat_flux(self, T_leaf, Ta, ra):
         """
@@ -142,7 +142,7 @@ class EnergyBalance:
         H = (rhoa * cp / ra) * (T_leaf - Ta)
         return {'H': H}
 
-    def stomatal_conductance_to_resistance(self, gs_mol, Ta=25, Patm=101325):
+    def stomatal_conductance_to_resistance(self, gs_mol, Ta, Patm=101325):
         """
         Convert stomatal conductance (mol m⁻² s⁻¹) to stomatal resistance (s m⁻¹).
 
@@ -162,10 +162,10 @@ class EnergyBalance:
 
         Example
         -------
-        rs = stomatal_conductance_to_resistance(0.3)
+        rs = stomatal_conductance_to_resistance(0.3, 25)
         print(rs)
         """
-        Ta_K = 25 + 273.15
+        Ta_K = Ta + 273.15
         R = 8.314  # J mol⁻¹ K⁻¹
         gs_ms = gs_mol * R * Ta_K / Patm  # convert molar to m s⁻¹
         rs = 1 / gs_ms

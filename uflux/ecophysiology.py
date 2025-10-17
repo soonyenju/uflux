@@ -518,7 +518,7 @@ class Optimality:
         - 'chi' : float — Optimal ratio of internal (Ci) to ambient (Ca) CO₂ partial pressures (χ)
         - 'Ci' : float — Intercellular CO₂ partial pressure (Pa)
     """
-    def __init__(self, env_params: dict, T_ref = 25., photosynthetic_pathway = 'C3', do_ftemp_kphio = True, limitation_factors = 'wang17') -> None:
+    def __init__(self, env_params: dict, T_ref = 25., photosynthetic_pathway = 'C3', do_temperature_scaling_kphio = True, limitation_factors = 'wang17') -> None:
         self.env_params = env_params
         # Ta, Patm, VPD, CO2
         self.env_params['VPD'] *= 100 # hPa -> Pa
@@ -547,7 +547,7 @@ class Optimality:
         
         self.env_params['Ci'] = self.env_params['chi'] * self.env_params['Ca']
 
-        self._calc_light_water_use_efficiency(do_ftemp_kphio, photosynthetic_pathway, limitation_factors = limitation_factors)
+        self._calc_light_water_use_efficiency(do_temperature_scaling_kphio, photosynthetic_pathway, limitation_factors = limitation_factors)
 
     @staticmethod
     def _calc_CO2_to_Ca(CO2, Patm):
@@ -719,7 +719,7 @@ class Optimality:
 
         return ftemp
 
-    def _calc_light_water_use_efficiency(self, do_ftemp_kphio, photosynthetic_pathway, limitation_factors):
+    def _calc_light_water_use_efficiency(self, do_temperature_scaling_kphio, photosynthetic_pathway, limitation_factors):
         """
         The basic calculation of LUE = phi0 * M_c * m with an added penalty term for jmax limitation
         """
@@ -727,12 +727,12 @@ class Optimality:
         # Molecular mass of carbon (12.0107, g)
 
         # Set context specific defaults for kphio to match Stocker paper
-        if not do_ftemp_kphio:
+        if not do_temperature_scaling_kphio:
             init_kphio = 0.049977
         else:
             init_kphio = 0.081785
 
-        if do_ftemp_kphio:
+        if do_temperature_scaling_kphio:
             if photosynthetic_pathway.upper() == 'C4':
                 is_c4_pathway = True
             elif photosynthetic_pathway.upper() == 'C3':

@@ -754,9 +754,9 @@ class Optimality:
         photosyn_limiting_fators = PhotosynLimiters(mj, limitation_factors)
         f_j, f_v =  photosyn_limiting_fators.f_j, photosyn_limiting_fators.f_v
 
-        self.lue = kphio * mj * f_v * k_c_molmass
+        self.env_params['LUE'] = kphio * mj * f_v * k_c_molmass
         # Intrinsic water use efficiency (iWUE, µmol mol-1)
-        self.iwue = (5 / 8 * (self.env_params['Ca'] - self.env_params['Ci'])) / (1e-6 * self.env_params['Patm'])
+        self.env_params['iWUE'] = (5 / 8 * (self.env_params['Ca'] - self.env_params['Ci'])) / (1e-6 * self.env_params['Patm'])
 
 
 # # ------------------------------------------------------------------------------------------------------------------------

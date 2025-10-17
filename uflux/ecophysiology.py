@@ -788,3 +788,162 @@ class Optimality:
 #     "\nLight use efficiency (LUE, (g C mol⁻¹ photons):",
 #     opt_model.lue
 # )
+
+
+# ========================================================================================================================
+# Module PhotosynthesisKinetics
+# ========================================================================================================================
+
+class PhotosynthesisKinetics:
+    """
+    A class for calculating temperature-dependent photosynthetic parameters
+    such as Vcmax (maximum carboxylation rate), Jmax (maximum electron transport rate),
+    and actual electron transport rate (J) using Arrhenius and peaked Arrhenius functions.
+
+    References
+    ----------
+    - Farquhar, G. D., von Caemmerer, S., & Berry, J. A. (1980). 
+      A biochemical model of photosynthetic CO₂ assimilation in leaves of C3 species.
+      Planta, 149(1), 78–90.
+    - Bernacchi, C. J., et al. (2001). Temperature response of mesophyll conductance.
+      Plant, Cell & Environment, 24(2), 253–259.
+
+    Constants
+    ---------
+    R : float
+        Universal gas constant (8.3145 J mol⁻¹ K⁻¹)
+
+    Example
+    -------
+    # Define temperature and light conditions
+    Ta_C = 11          # Air temperature (°C)
+    I = 1500           # Absorbed PAR (µmol photons m⁻² s⁻¹)
+
+    # Compute temperature-dependent parameters
+    Vcmax, Jmax = PhotosynthesisKinetics.calc_Vcmax_Jmax(Ta_C)
+    J = PhotosynthesisKinetics.calc_J(I, Jmax)
+
+    print(f"Vcmax = {Vcmax:.2f} µmol m⁻² s⁻¹")
+    print(f"Jmax  = {Jmax:.2f} µmol m⁻² s⁻¹")
+    print(f"J     = {J:.2f} µmol m⁻² s⁻¹")
+    """
+
+    R = 8.3145  # J mol⁻¹ K⁻¹
+
+    @staticmethod
+    def arrhenius(T: float, Ea: float, Tref: float = 298.15) -> float:
+        """
+        Standard Arrhenius temperature response function.
+
+        Parameters
+        ----------
+        T : float
+            Absolute temperature (Kelvin).
+        Ea : float
+            Activation energy (J mol⁻¹).
+        Tref : float, optional
+            Reference temperature (Kelvin). Default = 298.15 K.
+
+        Returns
+        -------
+        float
+            Temperature response scaling factor.
+        """
+        return np.exp(Ea * (T - Tref) / (PhotosynthesisKinetics.R * T * Tref))
+
+    @staticmethod
+    def peaked_arrhenius(T: float, Ea: float, S: float, Hd: float, Tref: float = 298.15) -> float:
+        """
+        Peaked Arrhenius function accounting for enzyme deactivation at high temperatures.
+
+        Parameters
+        ----------
+        T : float
+            Absolute temperature (Kelvin).
+        Ea : float
+            Activation energy (J mol⁻¹).
+        S : float
+            Entropy term (J mol⁻¹ K⁻¹).
+        Hd : float
+            Deactivation energy (J mol⁻¹).
+        Tref : float, optional
+            Reference temperature (Kelvin). Default = 298.15 K.
+
+        Returns
+        -------
+        float
+            Temperature response scaling factor including high-temperature inhibition.
+        """
+        num = PhotosynthesisKinetics.arrhenius(T, Ea, Tref)
+        den_ref = 1 + np.exp((S * Tref - Hd) / (PhotosynthesisKinetics.R * Tref))
+        den_temp = 1 + np.exp((S * T - Hd) / (PhotosynthesisKinetics.R * T))
+        return num * den_ref / den_temp
+
+    @classmethod
+    def calc_Vcmax_Jmax(
+        cls,
+        Ta_C: float,
+        Vcmax25: float = 60.0,
+        Jmax25: float = 100.0,
+        Ea_vcmax: float = 65000.0,
+        Ea_jmax: float = 50000.0,
+        S: float = 650.0,
+        Hd: float = 200000.0
+    ) -> tuple:
+        """
+        Calculate temperature-adjusted Vcmax and Jmax.
+
+        Parameters
+        ----------
+        Ta_C : float
+            Air temperature in Celsius.
+        Vcmax25 : float, optional
+            Reference Vcmax at 25°C. Default = 60 µmol m⁻² s⁻¹.
+        Jmax25 : float, optional
+            Reference Jmax at 25°C. Default = 100 µmol m⁻² s⁻¹.
+        Ea_vcmax : float, optional
+            Activation energy for Vcmax (J mol⁻¹).
+        Ea_jmax : float, optional
+            Activation energy for Jmax (J mol⁻¹).
+        S : float, optional
+            Entropy term for Jmax (J mol⁻¹ K⁻¹).
+        Hd : float, optional
+            Deactivation energy for Jmax (J mol⁻¹).
+
+        Returns
+        -------
+        tuple
+            (Vcmax, Jmax) in µmol m⁻² s⁻¹.
+        """
+        T = Ta_C + 273.15  # Convert °C to K
+        Vcmax = Vcmax25 * cls.arrhenius(T, Ea_vcmax)
+        Jmax = Jmax25 * cls.peaked_arrhenius(T, Ea_jmax, S, Hd)
+        return Vcmax, Jmax
+
+    @staticmethod
+    def calc_J(I: float, Jmax: float, alpha: float = 0.3, theta: float = 0.7) -> float:
+        """
+        Calculate the actual electron transport rate (J)
+        using the non-rectangular hyperbola model.
+
+        Parameters
+        ----------
+        I : float
+            Absorbed photosynthetically active radiation (µmol photons m⁻² s⁻¹).
+        Jmax : float
+            Maximum electron transport rate (µmol m⁻² s⁻¹).
+        alpha : float, optional
+            Quantum yield of electron transport. Default = 0.3.
+        theta : float, optional
+            Curvature factor of the light response curve. Default = 0.7.
+
+        Returns
+        -------
+        float
+            Actual electron transport rate (µmol m⁻² s⁻¹).
+        """
+        term = (alpha * I + Jmax)
+        return (term - np.sqrt(term**2 - 4 * theta * alpha * I * Jmax)) / (2 * theta)
+
+
+

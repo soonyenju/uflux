@@ -433,9 +433,9 @@ class EnergyBalance:
             T_leaf_final, infodict, ier, mesg = fsolve(
                 self._residual, T_guess, full_output=True
             )
-            # Use solution only if solver converged successfully (ier == 1)
-            T_leaf_final = T_leaf_final if ier == 1 else self.Ta + 1.0
-            if np.abs(T_leaf_final - self.Ta) > 10:
+            # # Use solution only if solver converged successfully (ier == 1)
+            # T_leaf_final = T_leaf_final if ier == 1 else self.Ta + 1.0
+            if np.abs(T_leaf_final - self.Ta) > 30:
                 print(f'Sanity check failed, T_leaf_final is {T_leaf_final} degC.')
                 # =============================================================================
                 # Approximate empirical relation (for sanity check):

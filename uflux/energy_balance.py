@@ -217,22 +217,11 @@ class EnergyBalance:
         rhoa = 1.2047     # kg m⁻³ - air density
 
         # --------------------------------------------------------------------------------
-        # Helper functions for saturation vapour pressure and its slope
-        # --------------------------------------------------------------------------------
-        def calc_temperature_to_vapour_pressure(T):
-            """Saturation vapour pressure [hPa]"""
-            return 6.107 * 10.0 ** (7.5 * T / (237.3 + T))
-
-        def calc_slope_saturation_vapour_pressure(es, T):
-            """Slope of saturation vapour pressure curve [hPa °C⁻¹]"""
-            return es * 2.3026 * 7.5 * 237.3 / (237.3 + T) ** 2
-
-        # --------------------------------------------------------------------------------
         # Convert parameters and compute intermediate quantities
         # --------------------------------------------------------------------------------
-        ei = calc_temperature_to_vapour_pressure(T_leaf)                        # saturation vapour pressure [hPa]
+        ei = self.calc_temperature_to_vapour_pressure(T_leaf)                        # saturation vapour pressure [hPa]
         ea = ei - VPD                                                           # ambient vapour pressure [hPa]
-        s = calc_slope_saturation_vapour_pressure(ei, T_leaf)                      # slope of saturation curve [hPa °C⁻¹]
+        s = self.calc_slope_saturation_vapour_pressure(ei, T_leaf)                      # slope of saturation curve [hPa °C⁻¹]
         e_to_q = (MH2O / Mair) / p             # conversion factor from vapour pressure [Pa] to specific humidity [kg kg⁻¹ hPa⁻¹]
 
         qi = ei * e_to_q                       # specific humidity at leaf surface [kg kg⁻¹]
@@ -247,6 +236,16 @@ class EnergyBalance:
 
         return {'LE': LE, 'lambda_v': lambda_v, 's': s}
 
+    # --------------------------------------------------------------------------------
+    # Helper functions for saturation vapour pressure and its slope
+    # --------------------------------------------------------------------------------
+    def calc_temperature_to_vapour_pressure(self, T):
+        """Saturation vapour pressure [hPa]"""
+        return 6.107 * 10.0 ** (7.5 * T / (237.3 + T))
+
+    def calc_slope_saturation_vapour_pressure(self, es, T):
+        """Slope of saturation vapour pressure curve [hPa °C⁻¹]"""
+        return es * 2.3026 * 7.5 * 237.3 / (237.3 + T) ** 2
 
     def calculate_canopy_net_radiation(self,
             shortwave_down: float, longwave_down: float, T_canopy: float, rad: dict,
@@ -355,6 +354,56 @@ class EnergyBalance:
 
         R_net = R_s_net + R_l_net
 
+        # =============================================================================
+        # Sanity Check and Approx. Net Radiation (Rn)
+        # =============================================================================
+        # Definition:
+        #   Net radiation (Rn) is the net balance between incoming and outgoing
+        #   shortwave and longwave radiation at the surface:
+        #
+        #       Rn = (Rs_down - Rs_up) + (Rl_down - Rl_up)
+        #
+        # Typical daytime values (W/m²):
+        #   - Clear midday:        600–900
+        #   - Normal sunny day:    400–700
+        #   - Cloudy day:          200–400
+        #   - Overcast/evening:    <200
+        #   - Nighttime cooling:   −20 to −100
+        #
+        # Typical daily mean Rn (W/m²):
+        #   - Tropical forest:      150–250
+        #   - Temperate grassland:  100–200
+        #   - Desert/arid land:      80–180
+        #   - Water/irrigated crop: 120–220
+        #   - Winter high-latitude:  30–100
+        #
+        # Approximate empirical formula:
+        #   Rn ≈ (1 - α) * Rs - ϵ * σ * (Ta + 273.15)**4 * (1 - 0.26 * ea_kPa**(1/7))
+        #
+        # Units:
+        #   Rn : Net radiation [W/m²]
+        #   Rs : Incoming shortwave radiation [W/m²]
+        #   α  : Surface albedo (shortwave reflectance) [dimensionless]
+        #        Typical 0.15–0.25 for vegetation
+        #   ϵ  : Surface longwave emissivity [dimensionless]
+        #        Typical ≈ 0.98
+        #   σ  : Stefan–Boltzmann constant [5.67 × 10⁻⁸ W·m⁻²·K⁻⁴]
+        #   Ta : Air temperature [°C]
+        #   ea : Actual vapor pressure [kPa]
+        #
+        # IMPORTANT:
+        #   If your vapor pressure (ea) is in hPa, convert to kPa before use:
+        #       ea_kPa = ea_hPa / 10
+        #
+        # Example:
+        #   Rn = (1 - 0.23) * Rs - 0.98 * 5.67e-8 * (Ta + 273.15)**4 * (1 - 0.26 * (ea_hPa / 10)**(1/7))
+        # =============================================================================
+        if R_net > 1000:
+            ea = self.calc_temperature_to_vapour_pressure(T_canopy) - self.VPD
+            R_net = (1 - rho_canopy) * shortwave_down - 0.98 * 5.67e-8 * (T_canopy + 273.15)**4 * (1 - 0.26 * (ea / 10)**(1/7))
+            R_s_net = R_net * R_s_net / (R_s_net + R_l_net)
+            R_l_net = R_net - R_s_net
+
         return {
             "R_net": R_net,
             "R_s_net": R_s_net,
@@ -370,8 +419,11 @@ class EnergyBalance:
         """
         H = self.sensible_heat_flux(T_leaf, self.Ta, self.ra)['H']
         LE = self.latent_heat_flux(T_leaf, self.VPD, self.ra, self.rs)['LE']
-        Rn = self.calculate_canopy_net_radiation(self.shortwave_down, self.longwave_down, T_leaf, self.rad)['R_net']
-        return np.array(Rn - (H + LE))
+        self.Rn = self.calculate_canopy_net_radiation(self.shortwave_down, self.longwave_down, T_leaf, self.rad)['R_net']
+        if np.abs(self.Ta - T_leaf) > 10:
+            # Return a large residual so fsolve moves away from this value
+            return 1e6
+        return np.array(self.Rn - (H + LE))
 
     def _solve_equilibrium(self, T_guess):
         """
@@ -382,9 +434,26 @@ class EnergyBalance:
                 self._residual, T_guess, full_output=True
             )
             # Use solution only if solver converged successfully (ier == 1)
-            T_leaf_final = T_leaf_final if ier == 1 else Ta + 1.0
+            T_leaf_final = T_leaf_final if ier == 1 else self.Ta + 1.0
+            if np.abs(T_leaf_final - self.Ta) > 10:
+                print(f'Sanity check failed, T_leaf_final is {T_leaf_final} degC.')
+                # =============================================================================
+                # Approximate empirical relation (for sanity check):
+                # =============================================================================
+                #     T_leaf = Ta + a*Rn - b*gs - c*ws
+                #   where:
+                #       a ≈ 0.01  (K·m²/W)      → radiative heating term
+                #       b ≈ 2.0   (K·(mol m⁻² s⁻¹)⁻¹) → stomatal cooling term
+                #       c ≈ 0.3   (K·s/m)       → wind cooling term
+                #
+                # Summary:
+                #   - Clear, calm, dry day:       +3 to +7 °C
+                #   - Cloudy or breezy day:       0 to +2 °C
+                #   - Humid, high transpiration:  −2 to 0 °C
+                #   - Nighttime radiative loss:   −2 to −5 °C
+                T_leaf_final = self.Ta + 0.01* self.Rn - 2 * self.gs - 0.3 * 1 # defual wind speed as 1 
         except Exception as e:
             print(e)
             # Fallback if solver fails — assume leaf is slightly warmer than air
-            T_leaf_final = self.Ta + 1.0
+            T_leaf_final = self.Ta + 0.01* self.Rn - 2 * self.gs - 0.3 * 1 # defual wind speed as 1 
         return T_leaf_final

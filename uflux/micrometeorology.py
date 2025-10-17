@@ -217,3 +217,38 @@ def calc_latent_heat_flux_air(Ta, VPD_hPa, u, P=101325):
 
     return LE
     
+
+def calc_RH_from_VPD(T_air, VPD):
+    """
+    Calculate relative humidity (RH) from air temperature (°C) and VPD in hPa.
+
+    Parameters
+    ----------
+    T_air : float or np.array
+        Air temperature in Celsius.
+    VPD : float or np.array
+        Vapor pressure deficit in hPa.
+
+    Returns
+    -------
+    RH : float or np.array
+        Relative humidity (0-1)
+
+    Example
+    -------
+    T_air = 25.0    # °C
+    VPD_hPa = 12.0  # hPa
+
+    RH = calc_RH_hPa(T_air, VPD_hPa)
+    print(f"Relative Humidity: {RH*100:.1f}%")
+    """
+    # Saturation vapor pressure in hPa
+    e_s = 6.108 * np.exp(17.27 * T_air / (T_air + 237.3))  # hPa
+
+    # Actual vapor pressure
+    e_a = e_s - VPD
+
+    # RH as fraction
+    RH = np.clip(e_a / e_s, 0, 1)
+
+    return RH

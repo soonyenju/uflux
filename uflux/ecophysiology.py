@@ -314,6 +314,157 @@ class WaterDensity:
         return rho
 
 # ========================================================================================================================
+# Module PhotosynLimiters
+# ========================================================================================================================
+
+class PhotosynLimiters:
+    """
+    Calculate photosynthesis limitation factors for electron transport (Jmax) 
+    and carboxylation capacity (Vcmax/assimilation) based on different empirical methods.
+
+    This class provides multiplicative scaling factors f_j and f_v that reduce 
+    photosynthetic rates according to limitations described in the literature.
+
+    Methods
+    -------
+    wang17(mj)
+        Calculate limitation factors following Wang et al., 2017.
+        - f_j : limitation factor for electron transport
+        - f_v : limitation factor for carboxylation
+        - Parameters:
+            mj : float or np.ndarray
+                Electron transport capacity or scaling variable
+
+    smith19(mj)
+        Calculate limitation factors following Smith et al., 2019.
+        - f_j : limitation factor for electron transport
+        - f_v : limitation factor for carboxylation
+        - Parameters:
+            mj : float or np.ndarray
+                Electron transport capacity or scaling variable
+
+    simple()
+        Return unity limitation factors (f_j = 1, f_v = 1), representing 
+        no limitation on photosynthesis.
+
+    Parameters
+    ----------
+    mj : float or np.ndarray
+        Electron transport capacity or scaling variable used to calculate 
+        limitation factors.
+    method : str
+        Method to compute limitation factors. Options:
+        - 'wang17' : Wang et al., 2017
+        - 'smith19' : Smith et al., 2019
+        - any other value : returns simple unity factors
+
+    Attributes
+    ----------
+    f_j : float or np.ndarray
+        Limitation factor for electron transport (Jmax)
+    f_v : float or np.ndarray
+        Limitation factor for carboxylation / assimilation
+
+    Example
+    -------
+    photosyn_limiting_fators = PhotosynLimiters(mj=0.5, method='wang17')
+    photosyn_limiting_fators.f_j, photosyn_limiting_fators.f_v
+    """
+    def __init__(self, mj, method) -> None:
+        if isinstance(mj, (pd.DataFrame, pd.Series)):
+            mj = mj.values
+        if method == 'wang17':
+            self.f_j, self.f_v = self.wang17(mj)
+        elif method == 'smith19':
+            self.f_j, self.f_v = self.smith19(mj)
+        else:
+            self.f_j, self.f_v = self.simple()
+    
+    @staticmethod
+    def wang17(mj):
+        """Calculate limitation factors following :cite:`Wang:2017go`."""
+        # Unit carbon cost for the maintenance of electron transport capacity (:math:`c`, 0.41, )
+        wang17_c = 0.41
+
+        vals_defined = np.greater(mj, wang17_c)
+
+        f_v = np.sqrt(1 - (wang17_c / mj) ** (2.0 / 3.0), where=vals_defined)
+        f_j = np.sqrt((mj / wang17_c) ** (2.0 / 3.0) - 1, where=vals_defined)
+
+        # Backfill undefined values - tackling float vs np.ndarray types
+        if isinstance(f_v, np.ndarray):
+            f_j[np.logical_not(vals_defined)] = np.nan  # type: ignore
+            f_v[np.logical_not(vals_defined)] = np.nan  # type: ignore
+        elif not vals_defined:
+            f_j = np.nan
+            f_v = np.nan
+        return f_j, f_v
+
+    def smith19(mj):
+        """Calculate limitation factors following :cite:`Smith:2019dv`."""
+
+        # Adopted from Nick Smith's code:
+        # Calculate omega, see Smith et al., 2019 Ecology Letters  # Eq. S4
+        # Scaling factor theta for Jmax limitation (:math:`\theta`, 0.85)
+        smith19_theta = 0.85
+        theta = smith19_theta
+        # Scaling factor c for Jmax limitation (:math:`c`, 0.05336251)
+        smith19_c_cost = 0.05336251
+        c_cost = smith19_c_cost
+
+        # simplification terms for omega calculation
+        cm = 4 * c_cost / mj
+        v = 1 / (cm * (1 - smith19_theta * cm)) - 4 * theta
+
+        # account for non-linearities at low m values. This code finds
+        # the roots of a quadratic function that is defined purely from
+        # the scalar theta, so will always be a scalar. The first root
+        # is then used to set a filter for calculating omega.
+
+        cap_p = (((1 / 1.4) - 0.7) ** 2 / (1 - theta)) + 3.4
+        aquad = -1
+        bquad = cap_p
+        cquad = -(cap_p * theta)
+        roots = np.polynomial.polynomial.polyroots(
+            [aquad, bquad, cquad]
+        )  # type: ignore [no-untyped-call]
+
+        # factors derived as in Smith et al., 2019
+        m_star = (4 * c_cost) / roots[0].real
+        omega = np.where(
+            mj < m_star,
+            -(1 - (2 * theta)) - np.sqrt((1 - theta) * v),
+            -(1 - (2 * theta)) + np.sqrt((1 - theta) * v),
+        )
+
+        # np.where _always_ returns an array, so catch scalars
+        omega = omega.item() if np.ndim(omega) == 0 else omega
+
+        omega_star = (
+            1.0
+            + omega
+            - np.sqrt((1.0 + omega) ** 2 - (4.0 * theta * omega))  # Eq. 18
+        )
+
+        # Effect of Jmax limitation - note scaling here. Smith et al use
+        # phi0 as as the quantum efficiency of electron transport, which is
+        # 4 times our definition of phio0 as the quantum efficiency of photosynthesis.
+        # So omega*/8 theta and omega / 4 are scaled down here  by a factor of 4.
+        # Ignore `mypy` here as omega_star is explicitly not None.
+        f_v = omega_star / (2.0 * theta)  # type: ignore
+        f_j = omega
+        return f_j, f_v
+
+    def simple():
+        """Apply the 'simple' form of the equations."""
+
+        # Set Jmax limitation to unity - could define as 1.0 in __init__ and
+        # pass here, but setting explicitly within the method for clarity.
+        f_v = np.array([1.0]) # no limitation for carboxylation
+        f_j = np.array([1.0]) # no limitation for electron transport
+        return f_j, f_v
+
+# ========================================================================================================================
 # Module Optimality
 # ========================================================================================================================
 
@@ -367,7 +518,7 @@ class Optimality:
         - 'chi' : float — Optimal ratio of internal (Ci) to ambient (Ca) CO₂ partial pressures (χ)
         - 'Ci' : float — Intercellular CO₂ partial pressure (Pa)
     """
-    def __init__(self, env_params: dict, T_ref = 25., photosynthetic_pathway = 'C3') -> None:
+    def __init__(self, env_params: dict, T_ref = 25., photosynthetic_pathway = 'C3', do_ftemp_kphio = True, limitation_factors = 'wang17') -> None:
         self.env_params = env_params
         # Ta, Patm, VPD, CO2
         self.env_params['VPD'] *= 100 # hPa -> Pa
@@ -395,6 +546,8 @@ class Optimality:
         )
         
         self.env_params['Ci'] = self.env_params['chi'] * self.env_params['Ca']
+
+        self._calc_light_water_use_efficiency(do_ftemp_kphio, photosynthetic_pathway, limitation_factors = limitation_factors)
 
     @staticmethod
     def _calc_CO2_to_Ca(CO2, Patm):
@@ -545,6 +698,66 @@ class Optimality:
 
         return kc * (1.0 + po / ko)
 
+    @staticmethod
+    def _calc_temperature_scaling_kphio(tc, is_c4_pathway = False):
+        '''
+        Quadratic scaling of Kphio with temperature
+        This function calculates a temperature scaling factor for Kphio (the quantum efficiency of photosystem II under light-limited conditions).
+        Kphio is often used in Farquhar-type photosynthesis models to link absorbed light to electron transport rate.
+        Photosynthesis efficiency changes with leaf temperature. This function provides a quadratic temperature response.
+        '''
+        kphio_C4 = (-0.064, 0.03, -0.000464)
+        kphio_C3 = (0.352, 0.022, -0.00034)
+
+        if is_c4_pathway:
+            coef = kphio_C4
+        else:
+            coef = kphio_C3
+
+        ftemp = coef[0] + coef[1] * tc + coef[2] * tc**2
+        ftemp = np.clip(ftemp, 0.0, None)
+
+        return ftemp
+
+    def _calc_light_water_use_efficiency(self, do_ftemp_kphio, photosynthetic_pathway, limitation_factors):
+        """
+        The basic calculation of LUE = phi0 * M_c * m with an added penalty term for jmax limitation
+        """
+        k_c_molmass = 12.0107
+        # Molecular mass of carbon (12.0107, g)
+
+        # Set context specific defaults for kphio to match Stocker paper
+        if not do_ftemp_kphio:
+            init_kphio = 0.049977
+        else:
+            init_kphio = 0.081785
+
+        if do_ftemp_kphio:
+            if photosynthetic_pathway.upper() == 'C4':
+                is_c4_pathway = True
+            elif photosynthetic_pathway.upper() == 'C3':
+                is_c4_pathway = False
+            else:
+                raise ValueError(f'Unknown photosynthetic pathway: {photosynthetic_pathway}')
+            ftemp_kphio = self._calc_temperature_scaling_kphio(self.env_params['Ta'], is_c4_pathway = is_c4_pathway)
+            kphio = init_kphio * ftemp_kphio
+        else:
+            kphio = np.array([init_kphio])
+
+        if photosynthetic_pathway.upper() == 'C4':
+            mj = 1
+        elif photosynthetic_pathway.upper() == 'C3':
+            mj = (self.env_params['Ci'] - self.env_params['gammastar']) / (self.env_params['Ci'] + 2 * self.env_params['gammastar'])
+        else:
+            raise ValueError(f'Unknown photosynthetic pathway: {photosynthetic_pathway}')
+
+        photosyn_limiting_fators = PhotosynLimiters(mj, limitation_factors)
+        f_j, f_v =  photosyn_limiting_fators.f_j, photosyn_limiting_fators.f_v
+
+        self.lue = kphio * mj * f_v * k_c_molmass
+        # Intrinsic water use efficiency (iWUE, µmol mol-1)
+        self.iwue = (5 / 8 * (self.env_params['Ca'] - self.env_params['Ci'])) / (1e-6 * self.env_params['Patm'])
+
 
 # # ------------------------------------------------------------------------------------------------------------------------
 # # Example
@@ -569,4 +782,8 @@ class Optimality:
 #     opt_model.env_params['chi'],
 #     "\nIntercellular CO₂ partial pressure (Ci, Pa):",
 #     opt_model.env_params['Ci'],
+#     "\nIntrinsic water use efficiency (iWUE, µmol mol-1):",
+#     opt_model.iwue,
+#     "\nLight use efficiency (LUE, (g C mol⁻¹ photons):",
+#     opt_model.lue
 # )

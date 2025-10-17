@@ -945,5 +945,3 @@ class PhotosynthesisKinetics:
         term = (alpha * I + Jmax)
         return (term - np.sqrt(term**2 - 4 * theta * alpha * I * Jmax)) / (2 * theta)
 
-
-
